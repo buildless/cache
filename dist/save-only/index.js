@@ -16914,6 +16914,7 @@ function restoreCache(paths, primaryKey, restoreKeys, options, enableCrossOsArch
             const cacheEntry = yield cacheHttpClient.getCacheEntry(keys, paths, {
                 compressionMethod,
                 enableCrossOsArchive,
+                endpoint: options === null || options === void 0 ? void 0 : options.endpoint,
                 token: options === null || options === void 0 ? void 0 : options.token
             });
             if (!(cacheEntry === null || cacheEntry === void 0 ? void 0 : cacheEntry.archiveLocation)) {
@@ -17002,6 +17003,7 @@ function saveCache(paths, key, options, enableCrossOsArchive = false) {
                 compressionMethod,
                 enableCrossOsArchive,
                 cacheSize: archiveFileSize,
+                endpoint: options === null || options === void 0 ? void 0 : options.endpoint,
                 token: options === null || options === void 0 ? void 0 : options.token
             });
             if ((_a = reserveCacheResponse === null || reserveCacheResponse === void 0 ? void 0 : reserveCacheResponse.result) === null || _a === void 0 ? void 0 : _a.cacheId) {
@@ -18430,12 +18432,13 @@ const crypto = __importStar(__webpack_require__(417));
 const fs = __importStar(__webpack_require__(747));
 const url_1 = __webpack_require__(835);
 const utils = __importStar(__webpack_require__(603));
+const constants_1 = __webpack_require__(539);
 const downloadUtils_1 = __webpack_require__(407);
 const options_1 = __webpack_require__(515);
 const requestUtils_1 = __webpack_require__(54);
 const versionSalt = '1.0';
-function getCacheApiUrl(resource) {
-    const baseUrl = process.env['ACTIONS_CACHE_URL'] || '';
+function getCacheApiUrl(resource, endpoint) {
+    const baseUrl = endpoint || constants_1.DefaultCacheEndpoint;
     if (!baseUrl) {
         throw new Error('Cache Service Url not found, unable to restore cache.');
     }
@@ -18483,12 +18486,14 @@ function getCacheEntry(keys, paths, options) {
         const httpClient = createHttpClient(options === null || options === void 0 ? void 0 : options.token);
         const version = getCacheVersion(paths, options === null || options === void 0 ? void 0 : options.compressionMethod, options === null || options === void 0 ? void 0 : options.enableCrossOsArchive);
         const resource = `cache?keys=${encodeURIComponent(keys.join(','))}&version=${version}`;
-        const response = yield (0, requestUtils_1.retryTypedResponse)('getCacheEntry', () => __awaiter(this, void 0, void 0, function* () { return httpClient.getJson(getCacheApiUrl(resource)); }));
+        const response = yield (0, requestUtils_1.retryTypedResponse)('getCacheEntry', () => __awaiter(this, void 0, void 0, function* () {
+            return httpClient.getJson(getCacheApiUrl(resource, options === null || options === void 0 ? void 0 : options.endpoint));
+        }));
         // Cache not found
         if (response.statusCode === 204) {
             // List cache for primary key only if cache miss occurs
             if (core.isDebug()) {
-                yield printCachesListForDiagnostics(keys[0], httpClient, version);
+                yield printCachesListForDiagnostics(keys[0], httpClient, version, options === null || options === void 0 ? void 0 : options.endpoint);
             }
             return null;
         }
@@ -18508,10 +18513,10 @@ function getCacheEntry(keys, paths, options) {
     });
 }
 exports.getCacheEntry = getCacheEntry;
-function printCachesListForDiagnostics(key, httpClient, version) {
+function printCachesListForDiagnostics(key, httpClient, version, endpoint) {
     return __awaiter(this, void 0, void 0, function* () {
         const resource = `caches?key=${encodeURIComponent(key)}`;
-        const response = yield (0, requestUtils_1.retryTypedResponse)('listCache', () => __awaiter(this, void 0, void 0, function* () { return httpClient.getJson(getCacheApiUrl(resource)); }));
+        const response = yield (0, requestUtils_1.retryTypedResponse)('listCache', () => __awaiter(this, void 0, void 0, function* () { return httpClient.getJson(getCacheApiUrl(resource, endpoint)); }));
         if (response.statusCode === 200) {
             const cacheListResult = response.result;
             const totalCount = cacheListResult === null || cacheListResult === void 0 ? void 0 : cacheListResult.totalCount;
@@ -18559,7 +18564,7 @@ function reserveCache(key, paths, options) {
             cacheSize: options === null || options === void 0 ? void 0 : options.cacheSize
         };
         const response = yield (0, requestUtils_1.retryTypedResponse)('reserveCache', () => __awaiter(this, void 0, void 0, function* () {
-            return httpClient.postJson(getCacheApiUrl('caches'), reserveCacheRequest);
+            return httpClient.postJson(getCacheApiUrl('caches', options === null || options === void 0 ? void 0 : options.endpoint), reserveCacheRequest);
         }));
         return response;
     });
@@ -18592,7 +18597,7 @@ function uploadFile(httpClient, cacheId, archivePath, options) {
     return __awaiter(this, void 0, void 0, function* () {
         // Upload Chunks
         const fileSize = utils.getArchiveFileSizeInBytes(archivePath);
-        const resourceUrl = getCacheApiUrl(`caches/${cacheId.toString()}`);
+        const resourceUrl = getCacheApiUrl(`caches/${cacheId.toString()}`, options === null || options === void 0 ? void 0 : options.endpoint);
         const fd = fs.openSync(archivePath, 'r');
         const uploadOptions = (0, options_1.getUploadOptions)(options);
         const concurrency = utils.assertDefined('uploadConcurrency', uploadOptions.uploadConcurrency);
@@ -18626,11 +18631,11 @@ function uploadFile(httpClient, cacheId, archivePath, options) {
         return;
     });
 }
-function commitCache(httpClient, cacheId, filesize) {
+function commitCache(httpClient, cacheId, filesize, endpoint) {
     return __awaiter(this, void 0, void 0, function* () {
         const commitCacheRequest = { size: filesize };
         return yield (0, requestUtils_1.retryTypedResponse)('commitCache', () => __awaiter(this, void 0, void 0, function* () {
-            return httpClient.postJson(getCacheApiUrl(`caches/${cacheId.toString()}`), commitCacheRequest);
+            return httpClient.postJson(getCacheApiUrl(`caches/${cacheId.toString()}`, endpoint), commitCacheRequest);
         }));
     });
 }
@@ -18643,7 +18648,7 @@ function saveCache(cacheId, archivePath, options) {
         core.debug('Commiting cache');
         const cacheSize = utils.getArchiveFileSizeInBytes(archivePath);
         core.info(`Cache Size: ~${Math.round(cacheSize / (1024 * 1024))} MB (${cacheSize} B)`);
-        const commitCacheResponse = yield commitCache(httpClient, cacheId, cacheSize);
+        const commitCacheResponse = yield commitCache(httpClient, cacheId, cacheSize, options === null || options === void 0 ? void 0 : options.endpoint);
         if (!(0, requestUtils_1.isSuccessStatusCode)(commitCacheResponse.statusCode)) {
             throw new Error(`Cache service responded with ${commitCacheResponse.statusCode} during commit cache.`);
         }
@@ -23274,9 +23279,11 @@ function saveImpl(stateProvider) {
                 required: true
             });
             const enableCrossOsArchive = utils.getInputAsBool(constants_1.Inputs.EnableCrossOsArchive);
+            const endpoint = core.getInput(constants_1.Inputs.Endpoint);
             const token = core.getInput(constants_1.Inputs.Token);
             cacheId = yield cache.saveCache(cachePaths, primaryKey, {
                 uploadChunkSize: utils.getInputAsInt(constants_1.Inputs.UploadChunkSize),
+                endpoint: endpoint,
                 token: token
             }, enableCrossOsArchive);
             if (cacheId != -1) {
@@ -24032,6 +24039,9 @@ function getUploadOptions(copy) {
         if (typeof copy.uploadChunkSize === 'number') {
             result.uploadChunkSize = copy.uploadChunkSize;
         }
+        if (typeof copy.endpoint === 'string') {
+            result.endpoint = copy.endpoint;
+        }
         if (typeof copy.token === 'string') {
             result.token = copy.token;
         }
@@ -24073,6 +24083,9 @@ function getDownloadOptions(copy) {
         }
         if (typeof copy.lookupOnly === 'boolean') {
             result.lookupOnly = copy.lookupOnly;
+        }
+        if (typeof copy.endpoint === 'string') {
+            result.endpoint = copy.endpoint;
         }
         if (typeof copy.token === 'string') {
             result.token = copy.token;
@@ -24424,7 +24437,7 @@ exports.implementation = class URLImpl {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ManifestFilename = exports.TarFilename = exports.SystemTarPathOnWindows = exports.GnuTarPathOnWindows = exports.SocketTimeout = exports.DefaultRetryDelay = exports.DefaultRetryAttempts = exports.ArchiveToolType = exports.CompressionMethod = exports.CacheFilename = void 0;
+exports.ManifestFilename = exports.TarFilename = exports.SystemTarPathOnWindows = exports.GnuTarPathOnWindows = exports.SocketTimeout = exports.DefaultRetryDelay = exports.DefaultRetryAttempts = exports.DefaultCacheEndpoint = exports.ArchiveToolType = exports.CompressionMethod = exports.CacheFilename = void 0;
 var CacheFilename;
 (function (CacheFilename) {
     CacheFilename["Gzip"] = "cache.tgz";
@@ -24443,6 +24456,8 @@ var ArchiveToolType;
     ArchiveToolType["GNU"] = "gnu";
     ArchiveToolType["BSD"] = "bsd";
 })(ArchiveToolType || (exports.ArchiveToolType = ArchiveToolType = {}));
+// The default endpoint used for cache requests.
+exports.DefaultCacheEndpoint = 'https://api.less.build/cache/gha';
 // The default number of retry attempts.
 exports.DefaultRetryAttempts = 2;
 // The default delay in milliseconds between retry attempts.
@@ -29679,6 +29694,7 @@ var Inputs;
     Inputs["EnableCrossOsArchive"] = "enableCrossOsArchive";
     Inputs["FailOnCacheMiss"] = "fail-on-cache-miss";
     Inputs["LookupOnly"] = "lookup-only";
+    Inputs["Endpoint"] = "endpoint";
     Inputs["Token"] = "token"; // Input for cache, restore, save action
 })(Inputs = exports.Inputs || (exports.Inputs = {}));
 var Outputs;
