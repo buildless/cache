@@ -9,7 +9,8 @@
     "test": "tsc --noEmit && jest --coverage",
     "lint": "eslint **/*.ts --cache",
     "format": "prettier --write **/*.ts",
-    "format-check": "prettier --check **/*.ts"
+    "format-check": "prettier --check **/*.ts",
+    "postinstall": "patch-package"
   },
   "repository": {
     "type": "git",
@@ -23,10 +24,11 @@
   "author": "GitHub",
   "license": "MIT",
   "dependencies": {
-    "@actions/cache": "file:../gha-toolkit/packages/cache",
+    "@actions/cache": "^3.2.2",
     "@actions/core": "^1.10.0",
     "@actions/exec": "^1.1.1",
-    "@actions/io": "^1.1.2"
+    "@actions/io": "^1.1.2",
+    "patch-package": "^8.0.0"
   },
   "devDependencies": {
     "@types/jest": "^27.5.2",
